@@ -21,7 +21,7 @@ fn main() {
                 }
                 WatchResult::NoChange => {}
                 WatchResult::Err(e) => {
-                    println!("{:?}", e);
+                    //  println!("{:?}", e);
                 }
             }
         }
@@ -63,7 +63,7 @@ pub enum WatchResult {
 
 impl Reloadable {
     pub fn new(fname: PathBuf) -> Self {
-        let (lib, last_updated) = Self::load_lib(&fname, true).unwrap();
+        let (lib, last_updated) = Self::load_lib(&fname).unwrap();
 
         Self {
             fname,
@@ -75,7 +75,6 @@ impl Reloadable {
     /// Clones the original lib, then returns a handle to the clone.
     fn load_lib(
         original_path: &PathBuf,
-        throw_errors: bool,
     ) -> Result<(libloading::Library, SystemTime), Box<dyn Error>> {
         use std::fs::File;
 
@@ -109,7 +108,7 @@ impl Reloadable {
         if last_updated > self.last_updated {
             self.lib = None;
 
-            let (lib, last_updated) = match Self::load_lib(&self.fname, false) {
+            let (lib, last_updated) = match Self::load_lib(&self.fname) {
                 Ok(result) => result,
                 Err(e) => {
                     return WatchResult::Err(e);
