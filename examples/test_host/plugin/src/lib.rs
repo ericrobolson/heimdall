@@ -25,9 +25,4 @@ impl heimdall::Watchable<State> for Plugin {
         state.counter += 11;
         println!("An update has occurred. State: {:?}", state);
     }
-
-    fn finalize(state: &mut State) {
-        state.counter = 0;
-        println!("A finalize has occurred. State: {:?}", state);
-    }
 }

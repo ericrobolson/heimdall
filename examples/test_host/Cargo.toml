@@ -13,4 +13,4 @@ hot-reload = ["heimdall/hot-reload"]
 [dependencies]
 state = {path="./state"}
 plugin = {path="./plugin"}
-heimdall = {path = "../heimdall"}
+heimdall = {path = "../../"}
