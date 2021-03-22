@@ -1,16 +1,4 @@
-extern crate libloading;
-use libloading::{Library, Symbol};
 use std::{env, error::Error, marker::PhantomData, path::PathBuf};
-use std::{fs, time::SystemTime};
-use std::{path::Path, time::Duration};
-
-#[macro_export]
-macro_rules! watch {
-    (
-        lib: $lib:expr,
-        lib_path: $path:expr,
-    ) => {};
-}
 
 /// Macro for enabling a watchable library.
 /// Ensure that
@@ -102,18 +90,20 @@ where
     pub fn new(file_path: PathBuf) -> (Self, State) {
         #[cfg(not(feature = "hot-reload"))]
         {
-            Self {
-                phantom: PhantomData,
-            }
+            let state = Plugin::init();
+
+            (
+                Self {
+                    phantom: PhantomData,
+                },
+                state,
+            )
         }
 
         #[cfg(feature = "hot-reload")]
         {
             let (lib, last_updated) = Self::load_lib(&file_path).unwrap();
-
-            let func: Symbol<unsafe fn() -> State> = unsafe { lib.get(b"heimdall_init").unwrap() };
-
-            let state = unsafe { func() };
+            let state = Self::heimdall_init(&lib);
 
             (
                 Self {
@@ -127,8 +117,57 @@ where
         }
     }
 
+    #[cfg(feature = "hot-reload")]
+    fn heimdall_init(lib: &libloading::Library) -> State {
+        let func: libloading::Symbol<unsafe fn() -> State> =
+            unsafe { lib.get(b"heimdall_init").unwrap() };
+        let state = unsafe { func() };
+
+        state
+    }
+
+    #[cfg(feature = "hot-reload")]
+    fn heimdall_update(lib: &libloading::Library, state: &mut State) {
+        let func: libloading::Symbol<unsafe fn(&mut State) -> State> =
+            unsafe { lib.get(b"heimdall_update").unwrap() };
+
+        unsafe {
+            func(state);
+        };
+    }
+
+    #[cfg(feature = "hot-reload")]
+    fn heimdall_unload(lib: &libloading::Library, state: &mut State) {
+        let func: libloading::Symbol<unsafe fn(&mut State) -> State> =
+            unsafe { lib.get(b"heimdall_unload").unwrap() };
+
+        unsafe {
+            func(state);
+        };
+    }
+
+    #[cfg(feature = "hot-reload")]
+    fn heimdall_reload(lib: &libloading::Library, state: &mut State) {
+        let func: libloading::Symbol<unsafe fn(&mut State) -> State> =
+            unsafe { lib.get(b"heimdall_reload").unwrap() };
+
+        unsafe {
+            func(state);
+        };
+    }
+
+    #[cfg(feature = "hot-reload")]
+    fn heimdall_finalize(lib: &libloading::Library, state: &mut State) {
+        let func: libloading::Symbol<unsafe fn(&mut State) -> State> =
+            unsafe { lib.get(b"heimdall_finalize").unwrap() };
+
+        unsafe {
+            func(state);
+        };
+    }
+
     /// Watches the file
-    pub fn watch(&mut self) -> WatchResult {
+    pub fn watch(&mut self, state: &mut State) -> WatchResult {
         #[cfg(not(feature = "hot-reload"))]
         {
             return WatchResult::NoChange;
@@ -148,6 +187,9 @@ where
             let last_updated = file.metadata().unwrap().modified().unwrap();
 
             if last_updated > self.last_updated {
+                // Do unload
+                Self::heimdall_unload(self.lib(), state);
+
                 self.lib = None;
 
                 let (lib, last_updated) = match Self::load_lib(&self.file_path) {
@@ -160,6 +202,8 @@ where
                 self.last_updated = last_updated;
                 self.lib = Some(lib);
 
+                Self::heimdall_reload(self.lib(), state);
+
                 WatchResult::Updated
             } else {
                 WatchResult::NoChange
@@ -167,11 +211,32 @@ where
         }
     }
 
+    /// Calls the 'update' state for the plugin.
+    pub fn update(&self, state: &mut State) {
+        #[cfg(not(feature = "hot-reload"))]
+        {
+            Plugin::update(state);
+        }
+
+        #[cfg(feature = "hot-reload")]
+        {
+            Self::heimdall_update(self.lib(), state);
+        }
+    }
+
+    #[cfg(feature = "hot-reload")]
+    fn lib(&self) -> &libloading::Library {
+        match &self.lib {
+            Some(lib) => lib,
+            None => panic!("Dynamic plugin has not been loaded!"),
+        }
+    }
+
     /// Clones the original lib, then returns a handle to the clone.
     #[cfg(feature = "hot-reload")]
     fn load_lib(
         original_path: &PathBuf,
-    ) -> Result<(libloading::Library, SystemTime), Box<dyn Error>> {
+    ) -> Result<(libloading::Library, std::time::SystemTime), Box<dyn Error>> {
         use std::fs::File;
 
         // Clone the DLL to enable watching
@@ -184,7 +249,7 @@ where
         let last_updated = file.metadata()?.modified()?;
 
         // Load the lib
-        let lib = unsafe { Library::new(cloned_name.clone().as_os_str())? };
+        let lib = unsafe { libloading::Library::new(cloned_name.clone().as_os_str())? };
 
         Ok((lib, last_updated))
     }
@@ -206,13 +271,5 @@ where
         path.set_file_name(file_name);
 
         path
-    }
-
-    #[cfg(feature = "hot-reload")]
-    fn lib(&self) -> Option<&libloading::Library> {
-        match &self.lib {
-            Some(lib) => Some(lib),
-            None => None,
-        }
     }
 }
