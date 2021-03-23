@@ -19,28 +19,35 @@ macro_rules! init_watchable {
     ) => {
         use heimdall::Watchable;
 
+        //TODO: try out by hidning no mangle + Extern C behind features
+
         /// Watchable init function
+        #[cfg(feature = "hot-reload")]
         #[no_mangle]
         pub extern "C" fn heimdall_init() -> $state {
             <$watchable>::init()
         }
 
+        /*
         /// Watchable reload function
+        #[cfg(feature = "hot-reload")]
         #[no_mangle]
-        pub extern "C" fn heimdall_reload(state: &mut $state) {
-            <$watchable>::reload(state);
+        pub extern "C" fn heimdall_reload(state: &mut $state) -> $state {
+            <$watchable>::reload(state)
         }
 
         /// Watchable unload function
+        #[cfg(feature = "hot-reload")]
         #[no_mangle]
-        pub extern "C" fn heimdall_unload(state: &mut $state) {
-            <$watchable>::unload(state);
+        pub extern "C" fn heimdall_unload(state: &mut $state) -> $state {
+            <$watchable>::unload(state)
         }
-
+        */
         /// Watchable update function
+        #[cfg(feature = "hot-reload")]
         #[no_mangle]
-        pub extern "C" fn heimdall_update(state: &mut $state) {
-            <$watchable>::update(state);
+        pub extern "C" fn heimdall_update(state: $state) -> $state {
+            <$watchable>::update(state)
         }
     };
 }
@@ -49,12 +56,15 @@ macro_rules! init_watchable {
 pub trait Watchable<State> {
     /// Called upon initial loading of the program
     fn init() -> State;
+
+    /*
     /// Called when the module is reloaded
-    fn reload(state: &mut State);
+    fn reload(state: State) -> State;
     /// Called when the module is unloaded
-    fn unload(state: &mut State);
+    fn unload(state: State) -> State;
+    */
     /// Called when the program requires an update of the state
-    fn update(state: &mut State);
+    fn update(state: State) -> State;
 }
 
 pub enum WatchResult {
@@ -114,7 +124,7 @@ where
     }
 
     /// Watches the file, reloading the dynamic library if it was modified. No-op when the feature is not enabled.
-    pub fn watch(&mut self, state: &mut State) -> WatchResult {
+    pub fn watch(&mut self) -> WatchResult {
         #[cfg(not(feature = "hot-reload"))]
         {
             return WatchResult::NoChange;
@@ -135,7 +145,7 @@ where
 
             if last_updated > self.last_updated {
                 // Do unload
-                Self::heimdall_unload(self.lib(), state);
+                // Self::heimdall_unload(self.lib(), state);
 
                 // Get and load the library
                 {
@@ -153,7 +163,7 @@ where
                 }
 
                 // Reload
-                Self::heimdall_reload(self.lib(), state);
+                //  Self::heimdall_reload(self.lib(), state);
 
                 WatchResult::Updated
             } else {
@@ -163,15 +173,14 @@ where
     }
 
     /// Calls the 'update' state for the plugin.
-    pub fn update(&self, state: &mut State) {
+    pub fn update(&self, state: State) -> State {
         #[cfg(not(feature = "hot-reload"))]
         {
-            Plugin::update(state);
+            Plugin::update(state)
         }
-
         #[cfg(feature = "hot-reload")]
         {
-            Self::heimdall_update(self.lib(), state);
+            Self::heimdall_update(self.lib(), state)
         }
     }
 
@@ -238,13 +247,11 @@ where
 
     /// Implementation for the `update()` functionality.
     #[cfg(feature = "hot-reload")]
-    fn heimdall_update(lib: &libloading::Library, state: &mut State) {
-        let func: libloading::Symbol<unsafe fn(&mut State) -> State> =
+    fn heimdall_update(lib: &libloading::Library, state: State) -> State {
+        let func: libloading::Symbol<unsafe fn(State) -> State> =
             unsafe { lib.get(b"heimdall_update").unwrap() };
 
-        unsafe {
-            func(state);
-        };
+        unsafe { func(state) }
     }
 
     /// Implementation for the `unload()` functionality.
