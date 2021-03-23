@@ -11,18 +11,9 @@ impl heimdall::Watchable<State> for Plugin {
         State { counter: 0 }
     }
 
-    fn reload(state: &mut State) {
-        state.counter += 1;
-        println!("A reload has occurred. State: {:?}", state);
-    }
-
-    fn unload(state: &mut State) {
-        state.counter -= 1;
-        println!("An unload has occurred. State: {:?}", state);
-    }
-
-    fn update(state: &mut State) {
+    fn update(mut state: State) -> State {
         state.counter += 11;
         println!("An update has occurred. State: {:?}", state);
+        state
     }
 }
