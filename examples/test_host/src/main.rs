@@ -8,7 +8,7 @@ fn main() {
         Watcher::new("./plugin/target/debug/plugin.dll".into());
 
     loop {
-        watcher.watch(&mut state);
-        watcher.update(&mut state);
+        watcher.watch();
+        state = watcher.update(state);
     }
 }

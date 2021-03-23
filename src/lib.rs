@@ -19,8 +19,6 @@ macro_rules! init_watchable {
     ) => {
         use heimdall::Watchable;
 
-        //TODO: try out by hidning no mangle + Extern C behind features
-
         /// Watchable init function
         #[cfg(feature = "hot-reload")]
         #[no_mangle]
@@ -28,21 +26,6 @@ macro_rules! init_watchable {
             <$watchable>::init()
         }
 
-        /*
-        /// Watchable reload function
-        #[cfg(feature = "hot-reload")]
-        #[no_mangle]
-        pub extern "C" fn heimdall_reload(state: &mut $state) -> $state {
-            <$watchable>::reload(state)
-        }
-
-        /// Watchable unload function
-        #[cfg(feature = "hot-reload")]
-        #[no_mangle]
-        pub extern "C" fn heimdall_unload(state: &mut $state) -> $state {
-            <$watchable>::unload(state)
-        }
-        */
         /// Watchable update function
         #[cfg(feature = "hot-reload")]
         #[no_mangle]
@@ -57,12 +40,6 @@ pub trait Watchable<State> {
     /// Called upon initial loading of the program
     fn init() -> State;
 
-    /*
-    /// Called when the module is reloaded
-    fn reload(state: State) -> State;
-    /// Called when the module is unloaded
-    fn unload(state: State) -> State;
-    */
     /// Called when the program requires an update of the state
     fn update(state: State) -> State;
 }
@@ -144,9 +121,6 @@ where
             let last_updated = file.metadata().unwrap().modified().unwrap();
 
             if last_updated > self.last_updated {
-                // Do unload
-                // Self::heimdall_unload(self.lib(), state);
-
                 // Get and load the library
                 {
                     self.lib = None;
@@ -161,9 +135,6 @@ where
                     self.last_updated = last_updated;
                     self.lib = Some(lib);
                 }
-
-                // Reload
-                //  Self::heimdall_reload(self.lib(), state);
 
                 WatchResult::Updated
             } else {
@@ -252,27 +223,5 @@ where
             unsafe { lib.get(b"heimdall_update").unwrap() };
 
         unsafe { func(state) }
-    }
-
-    /// Implementation for the `unload()` functionality.
-    #[cfg(feature = "hot-reload")]
-    fn heimdall_unload(lib: &libloading::Library, state: &mut State) {
-        let func: libloading::Symbol<unsafe fn(&mut State) -> State> =
-            unsafe { lib.get(b"heimdall_unload").unwrap() };
-
-        unsafe {
-            func(state);
-        };
-    }
-
-    /// Implementation for the `reload()` functionality.
-    #[cfg(feature = "hot-reload")]
-    fn heimdall_reload(lib: &libloading::Library, state: &mut State) {
-        let func: libloading::Symbol<unsafe fn(&mut State) -> State> =
-            unsafe { lib.get(b"heimdall_reload").unwrap() };
-
-        unsafe {
-            func(state);
-        };
     }
 }
